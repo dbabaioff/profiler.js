@@ -1,10 +1,9 @@
-(function(window, document, undefined) {
-    'use strict';
-
-    var ht     = window.ht || (window.ht = {}),
-        groups = {},
-        currentGroup = null,
-        options = {};
+(function(window, undefined) {'use strict';
+    var ht        = window.ht || (window.ht = {}),
+        groups    = {},
+        times     = {},
+        groupKeys = [],
+        options   = {};
 
     const TOTAL_KEY = 'TOTAL';
 
@@ -13,82 +12,102 @@
             Object.assign(options, opts);
         },
 
-        time: function(key) {
-            currentGroup = key;
+        group: function(key) {
+            groupKeys.push(key);
 
-            groups[currentGroup] = {};
+            groups[currentKey()] = {};
         },
 
-        timeEnd: function() {
-            let results = formatResults(groups);
+        groupEnd: function() {
+            let currentKey = groupKeys.pop(),
+                results    = formatResults(currentKey);
 
             if (typeof options.log === 'function') {
                 options.log('profiler', results);
             }
 
             printResults(results);
-
-            currentGroup = null;
         },
 
-        start: function(key) {
-            groups[currentGroup][key] = {
+        time: function(key) {
+            if (options.debugEnabled) {
+                console.log('%ctime:', 'color: #ff6666; font-size: 12px; font-weight: bold', key);
+            }
+
+            times[key] = {
                 start: window.performance.now(),
                 end: 0
             };
         },
 
+        timeEnd: function(key) {
+            if (times[key]) {
+                times[key].end = window.performance.now();
+
+                if (options.debugEnabled) {
+                    console.log('%ctimeEnd:', 'color: green;  font-size: 12px; font-weight: bold', key);
+                }
+
+                printResults({
+                    [key]: {
+                        [TOTAL_KEY]: times[key].end - times[key].start
+                    }
+                });
+            }
+        },
+
+        start: function(key) {
+            if (groups[currentKey()]) {
+                if (options.debugEnabled) {
+                    console.log('%cstart:', 'color: darkcyan; font-size: 12px; font-weight: bold', key);
+                }
+
+                groups[currentKey()][key] = {
+                    start: window.performance.now(),
+                    end: 0
+                };
+            }
+
+        },
+
         end: function(key) {
-            groups[currentGroup][key].end = window.performance.now();
+            if ((groups[currentKey()] || {})[key]) {
+                groups[currentKey()][key].end = window.performance.now();
+
+                if (options.debugEnabled) {
+                    console.log('%cend:', 'color: darkcyan; font-size: 12px; font-weight: bold', key);
+                }
+            }
         }
     };
 
     ///////////////////////////////////////
 
-    function formatResults(groups) {
+    function formatResults(currentKey) {
         var results = {
-            [currentGroup]: {}
+            [currentKey]: {}
         };
 
         let total = 0;
 
-        for (let key in groups[currentGroup]) {
-            results[currentGroup][key] = groups[currentGroup][key].end - groups[currentGroup][key].start;
+        for (let key in groups[currentKey]) {
+            results[currentKey][key] = groups[currentKey][key].end - groups[currentKey][key].start;
 
-            total += results[currentGroup][key];
+            total += results[currentKey][key];
         }
 
-        results[currentGroup][TOTAL_KEY] = total;
+        results[currentKey][TOTAL_KEY] = total;
 
         return results;
     }
 
     function printResults(results) {
-        window.console.table(results);
+        if (options.debugEnabled) {
+            window.console.table(results);
+        }
     }
-}(typeof window !== 'undefined' ? window : global, document));
 
-/*
-ht.profiler.time('1');
-
-ht.profiler.start('A');
-var x = 1;
-ht.profiler.end('A');
-
-ht.profiler.start('B');
-var z = 2;
-ht.profiler.end('B');
-
-ht.profiler.time('2');
-
-ht.profiler.start('A');
-var xx = 1;
-ht.profiler.end('A');
-
-ht.profiler.start('B');
-var zz = 2;
-ht.profiler.end('B');
-ht.profiler.timeEnd();
-
-ht.profiler.timeEnd();
-*/
+    function currentKey() {
+        return groupKeys[groupKeys.length - 1]  || null;
+    }
+}(typeof window !== 'undefined' ? window : global));
